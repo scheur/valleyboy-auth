@@ -1,0 +1,43 @@
+{
+    "Changes": [
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "_1234abcd5678efgh9012ijkl.valleyboy.io.",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "_validation.acm-validated.aws."
+                    }
+                ]
+            }
+        },
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "_1234abcd5678efgh9012ijkl.www.valleyboy.io.",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "_validation.acm-validated.aws."
+                    }
+                ]
+            }
+        },
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "_1234abcd5678efgh9012ijkl.auth.valleyboy.io.",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "_validation.acm-validated.aws."
+                    }
+                ]
+            }
+        }
+    ]
+}

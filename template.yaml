@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: valleyboy.io authentication infrastructure
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: valleyboy.io
+
+Resources:
+  ValleyboyAuth:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./infrastructure/cloudformation/auth.yaml
+      Parameters:
+        DomainName: !Ref DomainName
+
+Outputs:
+  UserPoolId:
+    Value: !GetAtt ValleyboyAuth.Outputs.UserPoolId
+  UserPoolClientId:
+    Value: !GetAtt ValleyboyAuth.Outputs.UserPoolClientId
+  CloudFrontDomain:
+    Value: !GetAtt ValleyboyAuth.Outputs.CloudFrontDomain

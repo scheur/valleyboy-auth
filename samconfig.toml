@@ -1,0 +1,10 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "valleyboy-auth"
+# s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-10v1czfm2rjx9"
+s3_prefix = "valleyboy-auth"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+parameter_overrides = "DomainName=valleyboy.io"
+image_repositories = []
