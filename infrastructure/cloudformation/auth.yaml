@@ -53,8 +53,83 @@ Resources:
         - COGNITO
       PreventUserExistenceErrors: ENABLED
 
+  # Add explicit dependency on certificate validation
+  CertificateValidation:
+    Type: Custom::CertificateValidation
+    DependsOn: Certificate
+    Properties:
+      ServiceToken: !GetAtt CertificateValidationFunction.Arn
+      CertificateArn: !Ref Certificate
+
+  CertificateValidationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt CertificateValidationRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import time
+          
+          def handler(event, context):
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      cert_arn = event['ResourceProperties']['CertificateArn']
+                      acm = boto3.client('acm')
+                      
+                      # Wait for certificate validation
+                      for _ in range(60):  # 60 attempts, 30 seconds each = 30 minutes timeout
+                          response = acm.describe_certificate(CertificateArn=cert_arn)
+                          status = response['Certificate']['Status']
+                          if status == 'ISSUED':
+                              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                              return
+                          if status == 'FAILED':
+                              cfnresponse.send(event, context, cfnresponse.FAILED, {
+                                  'Reason': 'Certificate validation failed'
+                              })
+                              return
+                          time.sleep(30)
+                      
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {
+                          'Reason': 'Timeout waiting for certificate validation'
+                      })
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      'Reason': str(e)
+                  })
+
+  CertificateValidationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ACMAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DescribeCertificate
+                Resource: !Ref Certificate
+
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+    DependsOn: 
+      - CertificateValidation  # Ensure certificate is validated
+      - UserPool  # Explicit dependency on UserPool
     Properties:
       Domain: !Sub "auth.${DomainName}"
       CustomDomainConfig:
@@ -63,6 +138,9 @@ Resources:
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
+    DependsOn: 
+      - CertificateValidation
+      - UserPoolDomain  # Add explicit dependency on UserPoolDomain
     Properties:
       DistributionConfig:
         Aliases:
@@ -81,7 +159,7 @@ Resources:
               HTTPSPort: 443
               OriginProtocolPolicy: http-only
           - Id: CognitoHostedUI
-            DomainName: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+            DomainName: !Sub "auth.${DomainName}"
             CustomOriginConfig:
               HTTPPort: 80
               HTTPSPort: 443
@@ -102,6 +180,9 @@ Resources:
 
   Route53Records:
     Type: AWS::Route53::RecordSetGroup
+    DependsOn:
+      - CertificateValidation
+      - CloudFrontDistribution
     Properties:
       HostedZoneId: Z0784189181KVEHDOY62L
       RecordSets:

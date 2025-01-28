@@ -6,5 +6,6 @@ s3_prefix = "valleyboy-auth"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "DomainName=valleyboy.io"
+parameter_overrides = "DomainName=\"valleyboy.io\""
 image_repositories = []
+resolve_s3 = true
