@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+      python: 3.9
+    commands:
+      - npm install -g aws-sam-cli
+      - pip install --upgrade pip
+      - pip install aws-sam-cli
+  
+  pre_build:
+    commands:
+      - npm install
+      
+  build:
+    commands:
+      - sam build
+      
+  post_build:
+    commands:
+      - sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name valleyboy-auth --capabilities CAPABILITY_IAM --region us-east-1 --s3-bucket valleyboy-auth-artifacts
+
+artifacts:
+  files:
+    - template.yaml
+    - '**/*'
+  base-directory: . 
