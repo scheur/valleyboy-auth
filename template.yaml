@@ -6,19 +6,207 @@ Parameters:
   DomainName:
     Type: String
     Default: valleyboy.io
-
+  
 Resources:
-  ValleyboyAuth:
-    Type: AWS::Serverless::Application
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
     Properties:
-      Location: ./infrastructure/cloudformation/auth.yaml
-      Parameters:
-        DomainName: !Ref DomainName
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: 
+        - !Sub "*.${DomainName}"
+      ValidationMethod: DNS
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: valleyboy-users
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: valleyboy-web-client
+      CallbackURLs: 
+        - !Sub "https://${DomainName}/callback"
+        - !Sub "https://www.${DomainName}/callback"
+      LogoutURLs:
+        - !Sub "https://${DomainName}"
+        - !Sub "https://www.${DomainName}"
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+      PreventUserExistenceErrors: ENABLED
+
+  CertificateValidation:
+    Type: Custom::CertificateValidation
+    DependsOn: Certificate
+    Properties:
+      ServiceToken: !GetAtt CertificateValidationFunction.Arn
+      CertificateArn: !Ref Certificate
+
+  CertificateValidationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt CertificateValidationRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import time
+          
+          def handler(event, context):
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      cert_arn = event['ResourceProperties']['CertificateArn']
+                      acm = boto3.client('acm')
+                      
+                      # Wait for certificate validation
+                      for _ in range(60):  # 60 attempts, 30 seconds each = 30 minutes timeout
+                          response = acm.describe_certificate(CertificateArn=cert_arn)
+                          status = response['Certificate']['Status']
+                          if status == 'ISSUED':
+                              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                              return
+                          if status == 'FAILED':
+                              cfnresponse.send(event, context, cfnresponse.FAILED, {
+                                  'Reason': 'Certificate validation failed'
+                              })
+                              return
+                          time.sleep(30)
+                      
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {
+                          'Reason': 'Timeout waiting for certificate validation'
+                      })
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      'Reason': str(e)
+                  })
+
+  CertificateValidationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ACMAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DescribeCertificate
+                Resource: !Ref Certificate
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    DependsOn: 
+      - CertificateValidation
+      - UserPool
+    Properties:
+      Domain: !Sub "auth.${DomainName}"
+      CustomDomainConfig:
+        CertificateArn: !Ref Certificate
+      UserPoolId: !Ref UserPool
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn: 
+      - CertificateValidation
+      - UserPoolDomain
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+          - !Sub "www.${DomainName}"
+          - !Sub "auth.${DomainName}"
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: S3Origin
+            DomainName: !Sub "${DomainName}.s3-website-us-east-1.amazonaws.com"
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+          - Id: CognitoHostedUI
+            DomainName: !Sub "auth.${DomainName}"
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: "/oauth2/*"
+            TargetOriginId: CognitoHostedUI
+            ViewerProtocolPolicy: redirect-to-https
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+
+  Route53Records:
+    Type: AWS::Route53::RecordSetGroup
+    DependsOn:
+      - CertificateValidation
+      - CloudFrontDistribution
+    Properties:
+      HostedZoneId: Z0784189181KVEHDOY62L
+      RecordSets:
+        - Name: !Ref DomainName
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt CloudFrontDistribution.DomainName
+        - Name: !Sub "www.${DomainName}"
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt CloudFrontDistribution.DomainName
+        - Name: !Sub "auth.${DomainName}"
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt CloudFrontDistribution.DomainName
 
 Outputs:
   UserPoolId:
-    Value: !GetAtt ValleyboyAuth.Outputs.UserPoolId
+    Value: !Ref UserPool
   UserPoolClientId:
-    Value: !GetAtt ValleyboyAuth.Outputs.UserPoolClientId
+    Value: !Ref UserPoolClient
   CloudFrontDomain:
-    Value: !GetAtt ValleyboyAuth.Outputs.CloudFrontDomain
+    Value: !GetAtt CloudFrontDistribution.DomainName
+  CognitoDomain:
+    Value: !Sub "auth.${DomainName}"
