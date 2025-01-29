@@ -87,9 +87,17 @@ Resources:
             Principal:
               Service: codepipeline.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSCodePipelineRole
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'codebuild:*'
+                  - 'codestar-connections:UseConnection'
+                Resource: '*'
 
   BuildRole:
     Type: AWS::IAM::Role
@@ -101,13 +109,22 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSCodeBuildAdminAccess
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                  - 's3:*'
+                  - 'cloudformation:*'
+                  - 'iam:*'
+                Resource: '*'
 
 Outputs:
   PipelineURL:
     Description: CodePipeline URL
     Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}
     Export:
-      Name: !Sub ${AWS::StackName}-PipelineURL 
+      Name: !Sub ${AWS::StackName}-PipelineURL
