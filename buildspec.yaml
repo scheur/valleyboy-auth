@@ -3,10 +3,8 @@ version: 0.2
 phases:
   build:
     commands:
-      - sam deploy --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset --stack-name valleyboy-auth --capabilities CAPABILITY_IAM --region us-east-1
+      - aws cloudformation deploy --template-file template.yaml --stack-name valleyboy-auth --capabilities CAPABILITY_IAM
 
 artifacts:
   files:
     - template.yaml
-    - '**/*'
-  base-directory: .
