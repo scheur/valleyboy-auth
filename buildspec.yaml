@@ -6,7 +6,6 @@ phases:
       nodejs: 18
       python: 3.9
     commands:
-      - npm install -g aws-sam-cli
       - pip install --upgrade pip
       - pip install aws-sam-cli
   
@@ -26,4 +25,4 @@ artifacts:
   files:
     - template.yaml
     - '**/*'
-  base-directory: . 
+  base-directory: .
