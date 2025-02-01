@@ -146,4 +146,5 @@ Resources:
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
+                  - codestar-connections:PassConnection
                 Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
