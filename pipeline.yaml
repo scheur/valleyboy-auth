@@ -4,7 +4,7 @@ Description: 'Pipeline for valleyboy-auth application'
 Resources:
   ArtifactBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Properties:
       BucketName: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
       VersioningConfiguration:
@@ -57,8 +57,7 @@ Resources:
                 Version: '1'
                 Provider: CodeStarSourceConnection
               Configuration:
-                ConnectionArn: arn:aws:codeconnections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
-                ConnectionName: aws-github-connection
+                ConnectionArn: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
                 FullRepositoryId: scheur/valleyboy-auth
                 BranchName: main
                 DetectChanges: true
@@ -148,4 +147,4 @@ Resources:
                 Action:
                   - codestar-connections:UseConnection
                   - codestar-connections:PassConnection
-                Resource: arn:aws:codeconnections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
+                Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
