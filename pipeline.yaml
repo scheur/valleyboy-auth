@@ -1,20 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Pipeline for valleyboy-auth application'
 
-Parameters:
-  GitHubOwner:
-    Type: String
-    Default: scheur
-  GitHubRepo:
-    Type: String
-    Default: valleyboy-auth
-  GitHubBranch:
-    Type: String
-    Default: main
-  GitHubConnectionArn:
-    Type: String
-    Default: arn:aws:codestar-connections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
-
 Resources:
   ArtifactBucket:
     Type: AWS::S3::Bucket
@@ -23,11 +9,6 @@ Resources:
       BucketName: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: DeleteOldArtifacts
-            Status: Enabled
-            ExpirationInDays: 30
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -76,9 +57,9 @@ Resources:
                 Version: '1'
                 Provider: CodeStarSourceConnection
               Configuration:
-                ConnectionArn: !Ref GitHubConnectionArn
-                FullRepositoryId: !Sub ${GitHubOwner}/${GitHubRepo}
-                BranchName: !Ref GitHubBranch
+                ConnectionArn: arn:aws:codestar-connections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
+                FullRepositoryId: scheur/valleyboy-auth
+                BranchName: main
                 DetectChanges: true
               OutputArtifacts:
                 - Name: SourceCode
@@ -165,15 +146,4 @@ Resources:
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
-                Resource: !Ref GitHubConnectionArn
-
-Outputs:
-  PipelineURL:
-    Description: CodePipeline URL
-    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}
-  ArtifactBucketName:
-    Description: Name of the artifact bucket
-    Value: !Ref ArtifactBucket
-  BuildProjectName:
-    Description: Name of the CodeBuild project
-    Value: !Ref BuildProject
+                Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
