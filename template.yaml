@@ -1,68 +1,69 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Cognito User Pool with Custom Domain UI for valleyboy.io
+Transform: AWS::Serverless-2016-10-31
+Description: Auth stack for valleyboy.io with quick updates
 
 Parameters:
-  DomainName:
+  Environment:
     Type: String
-    Default: auth.valleyboy.io
-    Description: Custom domain for Cognito hosted UI
-  RootDomain:
-    Type: String
-    Default: valleyboy.io
-    Description: Root domain name
-  HostedZoneId:
-    Type: String
-    Default: Z0784189181KVEHDOY62L
-    Description: Route 53 hosted zone ID for the domain
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, 'prod']
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    Timeout: 29
+    MemorySize: 1024
 
 Resources:
-  # SSL Certificate
+  # Certificate for custom domain
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
-      DomainName: !Ref DomainName
+      DomainName: auth.valleyboy.io
       ValidationMethod: DNS
       DomainValidationOptions:
-        - DomainName: !Ref DomainName
-          HostedZoneId: !Ref HostedZoneId
+        - DomainName: auth.valleyboy.io
+          HostedZoneId: Z0784189181KVEHDOY62L
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
 
-  # DNS Record for Custom Domain
-  CustomDomainDNSRecord:
-    Type: AWS::Route53::RecordSet
-    DependsOn: UserPoolDomain
-    Properties:
-      HostedZoneId: !Ref HostedZoneId
-      Name: !Ref DomainName
-      Type: A
-      AliasTarget:
-        DNSName: !GetAtt UserPoolDomain.CloudFrontDistribution
-        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront's hosted zone ID is always this
-        EvaluateTargetHealth: false
-
-  # Cognito User Pool
-  UserPool:
+  # User Pool
+  CognitoUserPool:
     Type: AWS::Cognito::UserPool
-    Properties:
-      UserPoolName: valleyboy-users
-      AdminCreateUserConfig:
+    Properties: 
+      UserPoolName: !Sub valleyboy-${Environment}
+      AdminCreateUserConfig: 
         AllowAdminCreateUserOnly: false
       AutoVerifiedAttributes:
         - email
-      UsernameAttributes:
+      UsernameAttributes: 
         - email
-      Schema:
+      Schema: 
         - Name: email
           Required: true
           Mutable: false
           AttributeDataType: String
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
 
-  # Cognito App Client
+  # User Pool Client
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      UserPoolId: !Ref UserPool
-      ClientName: valleyboy-client
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: !Sub valleyboy-client-${Environment}
       GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
       AllowedOAuthFlows:
         - implicit
       AllowedOAuthScopes:
@@ -76,30 +77,49 @@ Resources:
       SupportedIdentityProviders:
         - COGNITO
       AllowedOAuthFlowsUserPoolClient: true
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
 
-  # Custom Domain for Cognito
+  # Custom Domain
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
-    DependsOn: Certificate
     Properties:
-      Domain: !Ref DomainName
-      UserPoolId: !Ref UserPool
+      Domain: !If [IsProd, auth.valleyboy.io, !Sub auth-${Environment}.valleyboy.io]
+      UserPoolId: !Ref CognitoUserPool
       CustomDomainConfig:
         CertificateArn: !Ref Certificate
+    DependsOn: Certificate
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  # DNS Record
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z0784189181KVEHDOY62L
+      Name: !If [IsProd, auth.valleyboy.io, !Sub auth-${Environment}.valleyboy.io]
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt UserPoolDomain.CloudFrontDistribution
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+    DependsOn: UserPoolDomain
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
 
 Outputs:
   UserPoolId:
-    Description: The ID of the Cognito User Pool
-    Value: !Ref UserPool
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
   UserPoolClientId:
-    Description: The ID of the Cognito User Pool Client
+    Description: Cognito User Pool Client ID
     Value: !Ref UserPoolClient
-  HostedUIDomain:
-    Description: The custom domain for the Cognito hosted UI
-    Value: !Ref DomainName
-  CertificateArn:
-    Description: The ARN of the SSL certificate
-    Value: !Ref Certificate
-  CognitoLoginURL:
-    Description: The complete login URL for the hosted UI
-    Value: !Sub https://${DomainName}/login?client_id=${UserPoolClient}&response_type=token&scope=email+openid+profile&redirect_uri=https://valleyboy.io/callback
+
+  Domain:
+    Description: Custom domain for the auth UI
+    Value: !If [IsProd, auth.valleyboy.io, !Sub auth-${Environment}.valleyboy.io]
+
+  LoginUrl:
+    Description: Login URL
+    Value: !Sub https://${UserPoolDomain.Domain}/login?client_id=${UserPoolClient}&response_type=token&scope=email+openid+profile&redirect_uri=https://valleyboy.io/callback
