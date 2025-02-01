@@ -18,7 +18,9 @@ Parameters:
 Resources:
   ArtifactBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
+      BucketName: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
       LifecycleConfiguration:
@@ -26,9 +28,15 @@ Resources:
           - Id: DeleteOldArtifacts
             Status: Enabled
             ExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   BuildProject:
     Type: AWS::CodeBuild::Project
+    DependsOn: ArtifactBucket
     Properties:
       Name: valleyboy-auth-build
       ServiceRole: !GetAtt BuildRole.Arn
@@ -43,9 +51,15 @@ Resources:
         BuildSpec: buildspec.yaml
       Cache:
         Type: NO_CACHE
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub /aws/codebuild/${AWS::StackName}
+          StreamName: build-logs
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
+    DependsOn: [ArtifactBucket, BuildProject]
     Properties:
       Name: valleyboy-auth-pipeline
       RoleArn: !GetAtt PipelineRole.Arn
@@ -65,6 +79,7 @@ Resources:
                 ConnectionArn: !Ref GitHubConnectionArn
                 FullRepositoryId: !Sub ${GitHubOwner}/${GitHubRepo}
                 BranchName: !Ref GitHubBranch
+                DetectChanges: true
               OutputArtifacts:
                 - Name: SourceCode
               RunOrder: 1
@@ -106,7 +121,10 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                Resource: !Sub ${ArtifactBucket.Arn}/*
+                  - s3:ListBucket
+                Resource: 
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -138,9 +156,24 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
+                  - s3:GetObjectVersion
                   - s3:PutObject
-                Resource: !Sub ${ArtifactBucket.Arn}/*
+                  - s3:ListBucket
+                Resource: 
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
                 Resource: !Ref GitHubConnectionArn
+
+Outputs:
+  PipelineURL:
+    Description: CodePipeline URL
+    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}
+  ArtifactBucketName:
+    Description: Name of the artifact bucket
+    Value: !Ref ArtifactBucket
+  BuildProjectName:
+    Description: Name of the CodeBuild project
+    Value: !Ref BuildProject
