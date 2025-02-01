@@ -1,9 +1,8 @@
 version: 0.2
-
 phases:
   pre_build:
     commands:
-      # Delete stack if it exists in a failed state
+      # Clean up failed stacks
       - |
         if aws cloudformation describe-stacks --stack-name valleyboy-auth 2>&1 | grep -q "ROLLBACK_COMPLETE\|FAILED"; then
           echo "Found failed stack, deleting..."
@@ -13,8 +12,12 @@ phases:
         fi
   build:
     commands:
-      - aws cloudformation deploy --template-file template.yaml --stack-name valleyboy-auth --capabilities CAPABILITY_IAM
+      # Add --debug for more verbose output
+      - aws cloudformation validate-template --template-body file://template.yaml
+      - aws cloudformation deploy --template-file template.yaml --stack-name valleyboy-auth --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset --debug
 
 artifacts:
   files:
     - template.yaml
+    - README.md
+  base-directory: .

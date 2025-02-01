@@ -1,20 +1,19 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Pipeline for valleyboy-auth application
+Description: 'Pipeline for valleyboy-auth application'
 
 Parameters:
   GitHubOwner:
     Type: String
-    Description: GitHub repository owner
+    Default: scheur
   GitHubRepo:
     Type: String
-    Description: GitHub repository name
+    Default: valleyboy-auth
   GitHubBranch:
     Type: String
-    Description: GitHub branch name
     Default: main
-  CodeStarConnectionArn:
+  GitHubConnectionArn:
     Type: String
-    Description: ARN of the CodeStar connection to GitHub
+    Default: arn:aws:codestar-connections:us-east-1:811452274651:connection/e7443857-d8c2-4255-b15f-ced2c0732256
 
 Resources:
   ArtifactBucket:
@@ -22,6 +21,28 @@ Resources:
     Properties:
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: valleyboy-auth-build
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml
+      Cache:
+        Type: NO_CACHE
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
@@ -38,66 +59,30 @@ Resources:
               ActionTypeId:
                 Category: Source
                 Owner: AWS
-                Provider: CodeStarSourceConnection
                 Version: '1'
+                Provider: CodeStarSourceConnection
               Configuration:
-                ConnectionArn: !Ref CodeStarConnectionArn
+                ConnectionArn: !Ref GitHubConnectionArn
                 FullRepositoryId: !Sub ${GitHubOwner}/${GitHubRepo}
                 BranchName: !Ref GitHubBranch
               OutputArtifacts:
                 - Name: SourceCode
-        
+              RunOrder: 1
         - Name: Build
           Actions:
             - Name: Build
               ActionTypeId:
                 Category: Build
                 Owner: AWS
-                Provider: CodeBuild
                 Version: '1'
+                Provider: CodeBuild
               Configuration:
                 ProjectName: !Ref BuildProject
               InputArtifacts:
                 - Name: SourceCode
               OutputArtifacts:
                 - Name: BuildOutput
-
-  BuildProject:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Name: valleyboy-auth-build
-      ServiceRole: !GetAtt BuildRole.Arn
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:7.0
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: buildspec.yaml
-
-  PipelineRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: CodePipelinePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:*'
-                  - 'codebuild:*'
-                  - 'codestar-connections:UseConnection'
-                Resource: '*'
+              RunOrder: 1
 
   BuildRole:
     Type: AWS::IAM::Role
@@ -109,22 +94,53 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
       Policies:
-        - PolicyName: CodeBuildPolicy
+        - PolicyName: BuildPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - 'logs:*'
-                  - 's3:*'
-                  - 'cloudformation:*'
-                  - 'iam:*'
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub ${ArtifactBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cognito-idp:*
                 Resource: '*'
 
-Outputs:
-  PipelineURL:
-    Description: CodePipeline URL
-    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}
-    Export:
-      Name: !Sub ${AWS::StackName}-PipelineURL
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+      Policies:
+        - PolicyName: PipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub ${ArtifactBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnectionArn

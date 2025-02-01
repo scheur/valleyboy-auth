@@ -1,53 +1,62 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: valleyboy.io authentication
+Description: Cognito User Pool with Hosted UI for valleyboy.io
+
+Parameters:
+  DomainPrefix:
+    Type: String
+    Default: valleyboy
+    Description: Prefix for Cognito domain
 
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: valleyboy-users
-      UsernameAttributes:
-        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
       AutoVerifiedAttributes:
         - email
-      Policies:
-        PasswordPolicy:
-          MinimumLength: 8
-          RequireLowercase: true
-          RequireNumbers: true
-          RequireSymbols: true
-          RequireUppercase: true
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: false
+          AttributeDataType: String
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref UserPool
-      ClientName: valleyboy-web-client
-      CallbackURLs: 
-        - https://valleyboy.io/callback
-      LogoutURLs:
-        - https://valleyboy.io
+      ClientName: valleyboy-client
+      GenerateSecret: false
       AllowedOAuthFlows:
-        - code
+        - implicit
       AllowedOAuthScopes:
         - email
         - openid
         - profile
+      CallbackURLs:
+        - https://valleyboy.io/callback
+      LogoutURLs:
+        - https://valleyboy.io
       SupportedIdentityProviders:
         - COGNITO
-      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: valleyboy-auth
+      Domain: !Ref DomainPrefix
       UserPoolId: !Ref UserPool
 
 Outputs:
   UserPoolId:
+    Description: The ID of the Cognito User Pool
     Value: !Ref UserPool
   UserPoolClientId:
+    Description: The ID of the Cognito User Pool Client
     Value: !Ref UserPoolClient
-  UserPoolDomainName:
-    Value: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+  HostedUIDomain:
+    Description: The Cognito hosted UI domain
+    Value: !Sub ${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com
