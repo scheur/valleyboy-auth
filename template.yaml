@@ -1,13 +1,47 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Cognito User Pool with Hosted UI for valleyboy.io
+Description: Cognito User Pool with Custom Domain UI for valleyboy.io
 
 Parameters:
-  DomainPrefix:
+  DomainName:
     Type: String
-    Default: valleyboy
-    Description: Prefix for Cognito domain
+    Default: auth.valleyboy.io
+    Description: Custom domain for Cognito hosted UI
+  RootDomain:
+    Type: String
+    Default: valleyboy.io
+    Description: Root domain name
 
 Resources:
+  # SSL Certificate
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZone
+
+  # Route 53 Hosted Zone
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref RootDomain
+
+  # DNS Record for Custom Domain
+  CustomDomainDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        # This will be the Cognito CloudFront distribution
+        DNSName: !GetAtt UserPoolDomain.CloudFrontDistribution
+        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront's hosted zone ID is always this
+        EvaluateTargetHealth: false
+
+  # Cognito User Pool
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -24,6 +58,7 @@ Resources:
           Mutable: false
           AttributeDataType: String
 
+  # Cognito App Client
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
@@ -44,11 +79,14 @@ Resources:
         - COGNITO
       AllowedOAuthFlowsUserPoolClient: true
 
+  # Custom Domain for Cognito
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Ref DomainPrefix
+      Domain: !Ref DomainName
       UserPoolId: !Ref UserPool
+      CustomDomainConfig:
+        CertificateArn: !Ref Certificate
 
 Outputs:
   UserPoolId:
@@ -58,5 +96,8 @@ Outputs:
     Description: The ID of the Cognito User Pool Client
     Value: !Ref UserPoolClient
   HostedUIDomain:
-    Description: The Cognito hosted UI domain
-    Value: !Sub ${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com
+    Description: The custom domain for the Cognito hosted UI
+    Value: !Ref DomainName
+  CertificateArn:
+    Description: The ARN of the SSL certificate
+    Value: !Ref Certificate
