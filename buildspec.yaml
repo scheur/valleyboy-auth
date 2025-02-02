@@ -3,33 +3,6 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-<<<<<<< Updated upstream
-      python: 3.12
-    commands:
-      # Install SAM CLI
-      - curl -o aws-sam-cli.zip https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-arm64.zip
-      - unzip aws-sam-cli.zip -d sam-installation
-      - sudo ./sam-installation/install
-      - sam --version
-
-  pre_build:
-    commands:
-      # Clean up failed stacks
-      - |
-        if aws cloudformation describe-stacks --stack-name valleyboy-auth-dev 2>&1 | grep -q "ROLLBACK_COMPLETE\|FAILED"; then
-          echo "Found failed stack, deleting..."
-          aws cloudformation delete-stack --stack-name valleyboy-auth-dev
-          aws cloudformation wait stack-delete-complete --stack-name valleyboy-auth-dev
-          echo "Stack deleted"
-        fi
-
-  build:
-    commands:
-      # Validate and deploy
-      - sam validate --template template.yaml
-      - sam build
-      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name valleyboy-auth-dev --capabilities CAPABILITY_IAM --parameter-overrides Environment=dev --no-fail-on-empty-changeset
-=======
       nodejs: 18
       python: 3.12
     commands:
@@ -74,4 +47,3 @@ cache:
     - 'frontend/node_modules/**/*'
     - '/root/.npm/**/*'
     - '/root/.cache/pip/**/*'
->>>>>>> Stashed changes
