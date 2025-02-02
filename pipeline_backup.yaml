@@ -1,13 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Pipeline for valleyboy-auth application'
 
-Parameters:
-  Environment:
-    Type: String
-    Default: dev
-    AllowedValues: [dev, prod]
-    Description: Deployment environment
-
 Resources:
   ArtifactBucket:
     Type: AWS::S3::Bucket
@@ -21,16 +14,12 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: DeleteOldArtifacts
-            Status: Enabled
-            ExpirationInDays: 30
 
   BuildProject:
     Type: AWS::CodeBuild::Project
+    DependsOn: ArtifactBucket
     Properties:
-      Name: !Sub ${AWS::StackName}-build
+      Name: valleyboy-auth-build
       ServiceRole: !GetAtt BuildRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -38,20 +27,11 @@ Resources:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:7.0
-        PrivilegedMode: true
-        EnvironmentVariables:
-          - Name: NODE_ENV
-            Value: production
-          - Name: ENVIRONMENT
-            Value: !Ref Environment
       Source:
         Type: CODEPIPELINE
         BuildSpec: buildspec.yaml
       Cache:
-        Type: LOCAL
-        Modes:
-          - LOCAL_CUSTOM_CACHE
-          - LOCAL_SOURCE_CACHE
+        Type: NO_CACHE
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED
@@ -60,8 +40,9 @@ Resources:
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
+    DependsOn: [ArtifactBucket, BuildProject]
     Properties:
-      Name: !Sub ${AWS::StackName}-pipeline
+      Name: valleyboy-auth-pipeline
       RoleArn: !GetAtt PipelineRole.Arn
       ArtifactStore:
         Type: S3
@@ -83,7 +64,6 @@ Resources:
               OutputArtifacts:
                 - Name: SourceCode
               RunOrder: 1
-
         - Name: Build
           Actions:
             - Name: Build
@@ -99,69 +79,6 @@ Resources:
               OutputArtifacts:
                 - Name: BuildOutput
               RunOrder: 1
-
-        - Name: DeployInfrastructure
-          Actions:
-            - Name: CreateChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: '1'
-                Provider: CloudFormation
-              Configuration:
-                ActionMode: CHANGE_SET_REPLACE
-                StackName: !Sub ${AWS::StackName}-${Environment}
-                ChangeSetName: !Sub ${AWS::StackName}-changeset
-                TemplatePath: BuildOutput::packaged.yaml
-                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
-                RoleArn: !GetAtt CloudFormationRole.Arn
-                ParameterOverrides: !Sub |
-                  {
-                    "Environment": "${Environment}"
-                  }
-              InputArtifacts:
-                - Name: BuildOutput
-              RunOrder: 1
-
-            - Name: ExecuteChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: '1'
-                Provider: CloudFormation
-              Configuration:
-                ActionMode: CHANGE_SET_EXECUTE
-                StackName: !Sub ${AWS::StackName}-${Environment}
-                ChangeSetName: !Sub ${AWS::StackName}-changeset
-              RunOrder: 2
-
-        - Name: DeployFrontend
-          Actions:
-            - Name: DeployToS3
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: '1'
-                Provider: S3
-              Configuration:
-                BucketName: !Sub ${AWS::StackName}-web-${AWS::AccountId}
-                Extract: true
-              InputArtifacts:
-                - Name: BuildOutput
-              RunOrder: 1
-
-  CloudFormationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudformation.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AdministratorAccess
 
   BuildRole:
     Type: AWS::IAM::Role
@@ -228,18 +145,6 @@ Resources:
                   - !Sub ${ArtifactBucket.Arn}/*
               - Effect: Allow
                 Action:
-                  - cloudformation:*
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - iam:PassRole
-                Resource: '*'
-              - Effect: Allow
-                Action:
                   - codestar-connections:UseConnection
+                  - codestar-connections:PassConnection
                 Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
-
-Outputs:
-  PipelineUrl:
-    Description: CodePipeline URL
-    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}

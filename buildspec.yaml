@@ -1,7 +1,9 @@
 version: 0.2
+
 phases:
   install:
     runtime-versions:
+<<<<<<< Updated upstream
       python: 3.12
     commands:
       # Install SAM CLI
@@ -27,3 +29,49 @@ phases:
       - sam validate --template template.yaml
       - sam build
       - sam deploy --template-file .aws-sam/build/template.yaml --stack-name valleyboy-auth-dev --capabilities CAPABILITY_IAM --parameter-overrides Environment=dev --no-fail-on-empty-changeset
+=======
+      nodejs: 18
+      python: 3.12
+    commands:
+      - npm install -g yarn
+      - cd frontend
+      - yarn install --frozen-lockfile
+      - cd ../lambda
+      - pip install -r requirements.txt -t .
+      
+  pre_build:
+    commands:
+      - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
+
+  build:
+    commands:
+      # Build Frontend
+      - cd ../frontend
+      - echo "REACT_APP_API_ENDPOINT=${API_ENDPOINT}" > .env.production
+      - yarn build
+      
+      # Build Lambda Function
+      - cd ../lambda
+      - zip -r function.zip .
+      
+  post_build:
+    commands:
+      - cd ..
+      - mkdir -p dist/
+      - cp packaged.yaml dist/
+      - cp lambda/function.zip dist/
+      - cp -r frontend/build/* dist/frontend/
+
+artifacts:
+  files:
+    - packaged.yaml
+    - lambda/function.zip
+    - frontend/build/**/*
+  discard-paths: no
+
+cache:
+  paths:
+    - 'frontend/node_modules/**/*'
+    - '/root/.npm/**/*'
+    - '/root/.cache/pip/**/*'
+>>>>>>> Stashed changes

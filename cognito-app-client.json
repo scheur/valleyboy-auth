@@ -1,0 +1,20 @@
+{
+    "UserPoolId": "us-east-1_NeuoyywqQ",
+    "ClientName": "valleyboy-web-client",
+    "GenerateSecret": false,
+    "SupportedIdentityProviders": ["COGNITO"],
+    "AllowedOAuthFlows": ["implicit"],
+    "AllowedOAuthScopes": ["email", "openid", "profile"],
+    "CallbackURLs": [
+        "https://valleyboy.io/callback", 
+        "https://auth-dev.valleyboy.io/oauth2/idpresponse",
+        "http://localhost:3000/callback"
+    ],
+    "LogoutURLs": [
+        "https://valleyboy.io", 
+        "https://auth-dev.valleyboy.io",
+        "http://localhost:3000"
+    ],
+    "AllowedOAuthFlowsUserPoolClient": true,
+    "PreventUserExistenceErrors": "ENABLED"
+}
