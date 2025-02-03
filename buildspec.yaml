@@ -12,15 +12,10 @@ phases:
       nodejs: 20
       python: 3.12
     commands:
-      # First let runtime setup complete
-      - n 20.11.0
-      # Now install yarn using n-installed node
+      # On AL2023, we need to install build essentials
+      - yum install -y gcc-c++ make
+      - npm --version
       - npm install -g yarn
-      # Print environment info
-      - node --version
-      - yarn --version
-      - python --version
-      - pwd
       
   pre_build:
     commands:
