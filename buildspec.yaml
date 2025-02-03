@@ -11,29 +11,32 @@ phases:
       - yarn install --frozen-lockfile
       - cd ../lambda
       - pip install -r requirements.txt -t .
+      - cd ..
       
   pre_build:
     commands:
-      - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
+      - aws cloudformation package --template-file template.yaml --s3-bucket $ARTIFACT_BUCKET --output-template-file packaged.yaml
 
   build:
     commands:
       # Build Frontend
-      - cd ../frontend
-      - echo "REACT_APP_API_ENDPOINT=${API_ENDPOINT}" > .env.production
+      - cd frontend
+      - echo "REACT_APP_API_ENDPOINT=$API_ENDPOINT" > .env.production
       - yarn build
+      - cd ..
       
       # Build Lambda Function
-      - cd ../lambda
+      - cd lambda
       - zip -r function.zip .
+      - cd ..
       
   post_build:
     commands:
-      - cd ..
-      - mkdir -p dist/
-      - cp packaged.yaml dist/
-      - cp lambda/function.zip dist/
-      - cp -r frontend/build/* dist/frontend/
+      - mkdir dist
+      - copy packaged.yaml dist\
+      - copy lambda\function.zip dist\
+      - mkdir dist\frontend
+      - xcopy /E /I frontend\build\* dist\frontend\
 
 artifacts:
   files:

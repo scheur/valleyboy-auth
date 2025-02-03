@@ -46,10 +46,6 @@ Resources:
             Value: !Ref Environment
           - Name: ARTIFACT_BUCKET
             Value: !Ref ArtifactBucket
-          - Name: API_ENDPOINT
-            Value: !Sub https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
-          - Name: CLOUDFRONT_DISTRIBUTION_ID
-            Value: !Ref CloudFrontDistribution
       Source:
         Type: CODEPIPELINE
         BuildSpec: buildspec.yaml
@@ -63,6 +59,111 @@ Resources:
           Status: ENABLED
           GroupName: !Sub /aws/codebuild/${AWS::StackName}
           StreamName: build-logs
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${AWS::StackName}-pipeline
+      RoleArn: !GetAtt PipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              Configuration:
+                ConnectionArn: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
+                FullRepositoryId: scheur/valleyboy-auth
+                BranchName: main
+                DetectChanges: true
+              OutputArtifacts:
+                - Name: SourceCode
+              RunOrder: 1
+
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: '1'
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref BuildProject
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+        - Name: DeployInfrastructure
+          Actions:
+            - Name: CreateChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                StackName: !Sub ${AWS::StackName}-${Environment}
+                ChangeSetName: !Sub ${AWS::StackName}-changeset
+                TemplatePath: BuildOutput::packaged.yaml
+                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                ParameterOverrides: !Sub |
+                  {
+                    "Environment": "${Environment}"
+                  }
+              InputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+            - Name: ExecuteChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                StackName: !Sub ${AWS::StackName}-${Environment}
+                ChangeSetName: !Sub ${AWS::StackName}-changeset
+              RunOrder: 2
+
+        - Name: DeployFrontend
+          Actions:
+            - Name: DeployToS3
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: S3
+              Configuration:
+                BucketName: !Sub ${AWS::StackName}-web-${AWS::AccountId}
+                Extract: true
+              InputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
 
   BuildRole:
     Type: AWS::IAM::Role
@@ -109,13 +210,47 @@ Resources:
                   - bedrock:InvokeModel
                 Resource: 
                   - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
-        - PolicyName: CloudFrontPolicy
+
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+      Policies:
+        - PolicyName: PipelinePolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - cloudfront:CreateInvalidation
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource: 
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
 
-[Rest of pipeline.yaml remains the same...]
+Outputs:
+  PipelineUrl:
+    Description: CodePipeline URL
+    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${Pipeline}
