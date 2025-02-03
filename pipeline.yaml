@@ -41,7 +41,7 @@ Resources:
             except:
               exists = False
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Exists': exists})
-      Runtime: python3.9
+      Runtime: python3.12
       Timeout: 30
 
   CheckBucketFunctionRole:

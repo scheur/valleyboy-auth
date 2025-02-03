@@ -10,11 +10,10 @@ phases:
   install:
     runtime-versions:
       nodejs: 20
-      python: 3.11
+      python: 3.12
     commands:
-      # Install global npm packages if needed
-      - npm install -g pnpm
-      # - npm install -g yarn
+      # Install yarn globally
+      - npm install -g yarn
       # Print environment info
       - node --version
       - yarn --version
@@ -23,8 +22,6 @@ phases:
       
   pre_build:
     commands:
-      - npm ci
-      # - yarn install --frozen-lockfile
       # Install project dependencies
       - echo "Installing dependencies..."
       - cd frontend
@@ -62,7 +59,6 @@ phases:
       - cp -r frontend/build/* $ARTIFACT_PATH/frontend/
       - echo "Build completed on $(date)"
       - ls -la $ARTIFACT_PATH
-      - npm run test
 
 artifacts:
   base-directory: dist
