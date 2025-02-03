@@ -12,9 +12,13 @@ phases:
       nodejs: 20
       python: 3.12
     commands:
-      # On AL2023, we need to install build essentials
+      # Install build essentials first
       - yum install -y gcc-c++ make
-      - npm --version
+      # Explicitly set up Node
+      - curl -sL https://rpm.nodesource.com/setup_20.x | bash -
+      - yum install -y nodejs
+      - node --version  # Verify node is installed
+      - npm --version   # Verify npm is installed
       - npm install -g yarn
       
   pre_build:
