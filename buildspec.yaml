@@ -12,7 +12,10 @@ phases:
       nodejs: 18
       python: 3.12
     commands:
-      # Install global dependencies
+      # Install Node.js
+      - curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+      - yum install -y nodejs
+      # Now we can install yarn
       - npm install -g yarn
       # Print environment info
       - node --version

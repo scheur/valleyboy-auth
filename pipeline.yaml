@@ -7,6 +7,11 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Deployment environment
+  CreateArtifactBucket:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Whether to create a new artifact bucket
 
 Resources:
   CheckBucketExists:
@@ -80,9 +85,6 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
-Conditions:
-  CreateNewBucket: !Not [!GetAtt CheckBucketExists.Exists]
-
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -93,7 +95,7 @@ Conditions:
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        Image: aws/codebuild/standard:7.0
         PrivilegedMode: true
         EnvironmentVariables:
           - Name: NODE_ENV
@@ -307,6 +309,9 @@ Conditions:
                 Action:
                   - codestar-connections:UseConnection
                 Resource: arn:aws:codestar-connections:us-east-1:811452274651:connection/0691892d-0b01-4c95-ac2b-2c4485e24e71
+
+Conditions:
+  CreateNewBucket: !Equals [!Ref CreateArtifactBucket, 'true']
 
 Outputs:
   PipelineUrl:
