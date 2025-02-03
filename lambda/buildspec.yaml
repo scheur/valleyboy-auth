@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      # Install UV pip
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      # Add to PATH
+      - export PATH="/root/.cargo/bin:$PATH"
+      - uv --version
+      
+  pre_build:
+    commands:
+      - uv pip install -r requirements.txt -t .
+      # Package CloudFormation template
+      - aws cloudformation package --template-file ../template.yaml --s3-bucket $ARTIFACT_BUCKET --output-template-file packaged.yaml
+      
+  build:
+    commands:
+      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*" "node_modules/*"
