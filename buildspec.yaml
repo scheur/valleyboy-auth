@@ -1,52 +1,74 @@
 version: 0.2
 
+env:
+  shell: bash
+  variables:
+    ARTIFACT_PATH: 'dist'
+    NODE_OPTIONS: '--max_old_space_size=4096'
+
 phases:
   install:
     runtime-versions:
       nodejs: 18
       python: 3.12
     commands:
+      # Install global dependencies
       - npm install -g yarn
+      # Print environment info
+      - node --version
+      - yarn --version
+      - python --version
+      - pwd
+      
+  pre_build:
+    commands:
+      # Install project dependencies
+      - echo "Installing dependencies..."
       - cd frontend
       - yarn install --frozen-lockfile
       - cd ../lambda
       - pip install -r requirements.txt -t .
       - cd ..
-      
-  pre_build:
-    commands:
+      # Package CloudFormation template
+      - echo "Packaging CloudFormation template..."
       - aws cloudformation package --template-file template.yaml --s3-bucket $ARTIFACT_BUCKET --output-template-file packaged.yaml
 
   build:
     commands:
       # Build Frontend
+      - echo "Building frontend..."
       - cd frontend
-      - echo "REACT_APP_API_ENDPOINT=$API_ENDPOINT" > .env.production
+      - printf "REACT_APP_API_ENDPOINT=%s" "$API_ENDPOINT" > .env.production
+      - cat .env.production
       - yarn build
       - cd ..
       
       # Build Lambda Function
+      - echo "Building lambda function..."
       - cd lambda
-      - zip -r function.zip .
+      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*" "node_modules/*"
       - cd ..
       
   post_build:
     commands:
-      - mkdir dist
-      - copy packaged.yaml dist\
-      - copy lambda\function.zip dist\
-      - mkdir dist\frontend
-      - xcopy /E /I frontend\build\* dist\frontend\
+      - echo "Preparing artifacts..."
+      - rm -rf $ARTIFACT_PATH
+      - mkdir -p $ARTIFACT_PATH/frontend
+      - cp packaged.yaml $ARTIFACT_PATH/
+      - cp lambda/function.zip $ARTIFACT_PATH/
+      - cp -r frontend/build/* $ARTIFACT_PATH/frontend/
+      - echo "Build completed on $(date)"
+      - ls -la $ARTIFACT_PATH
 
 artifacts:
+  base-directory: dist
   files:
-    - packaged.yaml
-    - lambda/function.zip
-    - frontend/build/**/*
+    - '**/*'
   discard-paths: no
 
 cache:
   paths:
-    - 'frontend/node_modules/**/*'
-    - '/root/.npm/**/*'
-    - '/root/.cache/pip/**/*'
+    - frontend/node_modules/**/*
+    - /root/.npm/**/*
+    - /root/.cache/pip/**/*
+    - /usr/local/lib/node_modules/**/*

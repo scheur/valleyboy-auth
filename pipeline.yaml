@@ -45,7 +45,9 @@ Resources:
           - Name: ENVIRONMENT
             Value: !Ref Environment
           - Name: ARTIFACT_BUCKET
-            Value: !Ref ArtifactBucket
+            Value: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
+          - Name: API_ENDPOINT
+            Value: !Sub https://${AWS::StackName}-api-${AWS::AccountId}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
       Source:
         Type: CODEPIPELINE
         BuildSpec: buildspec.yaml
