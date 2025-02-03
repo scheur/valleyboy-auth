@@ -12,7 +12,8 @@ phases:
   build:
     commands:
       - cd lambda
-      - uv pip install -r requirements.txt -t .
+      - mkdir -p .
+      - PYTHONPATH=. uv pip install -r requirements.txt
       - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*"
 artifacts:
   files:
