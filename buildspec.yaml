@@ -12,7 +12,9 @@ phases:
       nodejs: 20
       python: 3.12
     commands:
-      # Install yarn globally
+      # First let runtime setup complete
+      - n 20.11.0
+      # Now install yarn using n-installed node
       - npm install -g yarn
       # Print environment info
       - node --version
