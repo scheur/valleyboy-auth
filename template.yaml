@@ -22,6 +22,83 @@ Globals:
     MemorySize: 1024
 
 Resources:
+  # DNS Cleanup Resources
+  CheckDnsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.12
+      Role: !GetAtt CheckDnsFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          def handler(event, context):
+              if event['RequestType'] == 'Delete':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+                  
+              route53 = boto3.client('route53')
+              
+              try:
+                  # Try to get existing record
+                  response = route53.list_resource_record_sets(
+                      HostedZoneId=event['ResourceProperties']['HostedZoneId'],
+                      StartRecordName=event['ResourceProperties']['RecordName'],
+                      StartRecordType='A',
+                      MaxItems='1'
+                  )
+                  
+                  # Check if record exists and delete if it does
+                  for record in response['ResourceRecordSets']:
+                      if record['Name'] == event['ResourceProperties']['RecordName']:
+                          route53.change_resource_record_sets(
+                              HostedZoneId=event['ResourceProperties']['HostedZoneId'],
+                              ChangeBatch={
+                                  'Changes': [{
+                                      'Action': 'DELETE',
+                                      'ResourceRecordSet': record
+                                  }]
+                              }
+                          )
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  # We don't fail if record doesn't exist
+                  pass
+                  
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+  CheckDnsFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: Route53Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ListResourceRecordSets
+                  - route53:ChangeResourceRecordSets
+                Resource: !Sub arn:aws:route53:::hostedzone/Z0784189181KVEHDOY62L
+
+  CheckDnsRecord:
+    Type: Custom::CheckDnsRecord
+    Properties:
+      ServiceToken: !GetAtt CheckDnsFunction.Arn
+      HostedZoneId: Z0784189181KVEHDOY62L
+      RecordName: !If [IsProd, "auth.valleyboy.io", !Sub "auth-${Environment}.valleyboy.io"]
+
   # Certificate for custom domain
   Certificate:
     Type: AWS::CertificateManager::Certificate
@@ -88,7 +165,9 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
       CustomDomainConfig:
         CertificateArn: !Ref Certificate
-    DependsOn: Certificate
+    DependsOn: 
+      - Certificate
+      - CheckDnsRecord
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 

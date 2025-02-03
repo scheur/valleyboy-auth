@@ -1,0 +1,20 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - yum install -y gcc-c++ make
+      - npm install -g yarn
+  build:
+    commands:
+      - cd frontend
+      - yarn install --frozen-lockfile
+      - yarn build
+artifacts:
+  base-directory: frontend/build
+  files:
+    - '**/*'
+cache:
+  paths:
+    - frontend/node_modules/**/* 

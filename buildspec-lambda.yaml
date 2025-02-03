@@ -1,0 +1,19 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="/root/.cargo/bin:$PATH"
+  build:
+    commands:
+      - cd lambda
+      - uv pip install -r requirements.txt -t .
+      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*"
+artifacts:
+  files:
+    - lambda/function.zip
+cache:
+  paths:
+    - /root/.cache/pip/**/* 

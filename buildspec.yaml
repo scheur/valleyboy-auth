@@ -14,6 +14,11 @@ phases:
     commands:
       # Install build essentials first
       - yum install -y gcc-c++ make
+      # Install UV pip
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      # Add UV to PATH
+      - export PATH="/root/.cargo/bin:$PATH"
+      - uv --version
       # Explicitly set up Node
       - curl -sL https://rpm.nodesource.com/setup_20.x | bash -
       - yum install -y nodejs
@@ -26,6 +31,14 @@ phases:
       
   pre_build:
     commands:
+      # Verify required environment variables
+      - |
+        for var in API_ENDPOINT ARTIFACT_BUCKET; do
+          if [ -z "${!var}" ]; then
+            echo "Error: $var is not set"
+            exit 1
+          fi
+        done
       # Install project dependencies
       - echo "Installing dependencies..."
       - cd frontend
@@ -42,15 +55,23 @@ phases:
       # Build Frontend
       - echo "Building frontend..."
       - cd frontend
-      - printf "REACT_APP_API_ENDPOINT=%s" "$API_ENDPOINT" > .env.production
+      - |
+        if ! printf "REACT_APP_API_ENDPOINT=%s" "$API_ENDPOINT" > .env.production; then
+          echo "Failed to create .env.production"
+          exit 1
+        fi
       - cat .env.production
-      - yarn build
+      - yarn build || exit 1
       - cd ..
       
       # Build Lambda Function
       - echo "Building lambda function..."
       - cd lambda
-      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*" "node_modules/*"
+      - |
+        if ! zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*" "node_modules/*"; then
+          echo "Failed to create function.zip"
+          exit 1
+        fi
       - cd ..
       
   post_build:
@@ -63,6 +84,16 @@ phases:
       - cp -r frontend/build/* $ARTIFACT_PATH/frontend/
       - echo "Build completed on $(date)"
       - ls -la $ARTIFACT_PATH
+      # Add size checks
+      - |
+        MAX_SIZE_MB=250
+        for file in $ARTIFACT_PATH/function.zip $ARTIFACT_PATH/packaged.yaml; do
+          size=$(du -m "$file" | cut -f1)
+          if [ "$size" -gt "$MAX_SIZE_MB" ]; then
+            echo "Error: $file is larger than ${MAX_SIZE_MB}MB (${size}MB)"
+            exit 1
+          fi
+        done
 
 artifacts:
   base-directory: dist

@@ -1,1 +1,146 @@
 # [Previous pipeline.yaml content with the updates]
+
+Parameters:
+  ArtifactBucketName:
+    Type: String
+    Description: S3 bucket for build artifacts
+
+Resources:
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt PipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucketName
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: '1'
+              Configuration:
+                RepositoryName: valleyboy-auth
+                BranchName: main
+              OutputArtifacts:
+                - Name: SourceCode
+
+        - Name: Build
+          Actions:
+            - Name: BuildFrontend
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref FrontendBuild
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: FrontendBuildOutput
+              RunOrder: 1
+
+            - Name: BuildLambda
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref LambdaBuild
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: LambdaBuildOutput
+              RunOrder: 1
+
+        - Name: Package
+          Actions:
+            - Name: PackageTemplate
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref PackageBuild
+              InputArtifacts:
+                - Name: SourceCode
+                - Name: FrontendBuildOutput
+                - Name: LambdaBuildOutput
+              OutputArtifacts:
+                - Name: PackagedTemplate
+              RunOrder: 1
+
+        - Name: Deploy
+          Actions:
+            - Name: DeployStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                StackName: valleyboy-auth-dev
+                TemplatePath: PackagedTemplate::packaged.yaml
+                ParameterOverrides: |
+                  {
+                    "Environment": "dev"
+                  }
+              InputArtifacts:
+                - Name: PackagedTemplate
+              RunOrder: 1
+
+  # CodeBuild Projects
+  FrontendBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: valleyboy-auth-frontend
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-frontend.yaml
+
+  LambdaBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: valleyboy-auth-lambda
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-lambda.yaml
+
+  PackageBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: valleyboy-auth-package
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-package.yaml
+
+  # IAM Roles would go here...
