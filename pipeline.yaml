@@ -9,9 +9,62 @@ Parameters:
     Description: Deployment environment
 
 Resources:
+  CheckBucketExists:
+    Type: Custom::CheckBucketExists
+    Properties:
+      ServiceToken: !GetAtt CheckBucketFunction.Arn
+      BucketName: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
+
+  CheckBucketFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt CheckBucketFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          def handler(event, context):
+            if event['RequestType'] == 'Delete':
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              return
+            s3 = boto3.client('s3')
+            bucket_name = event['ResourceProperties']['BucketName']
+            try:
+              s3.head_bucket(Bucket=bucket_name)
+              exists = True
+            except:
+              exists = False
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Exists': exists})
+      Runtime: python3.9
+      Timeout: 30
+
+  CheckBucketFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3HeadBucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:HeadBucket
+                Resource: '*'
+
   ArtifactBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Delete
+    Condition: CreateNewBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
       VersioningConfiguration:
@@ -26,6 +79,9 @@ Resources:
           - Id: DeleteOldArtifacts
             Status: Enabled
             ExpirationInDays: 30
+
+Conditions:
+  CreateNewBucket: !Not [!GetAtt CheckBucketExists.Exists]
 
   BuildProject:
     Type: AWS::CodeBuild::Project
@@ -69,7 +125,7 @@ Resources:
       RoleArn: !GetAtt PipelineRole.Arn
       ArtifactStore:
         Type: S3
-        Location: !Ref ArtifactBucket
+        Location: !Sub ${AWS::StackName}-artifacts-${AWS::AccountId}
       Stages:
         - Name: Source
           Actions:
