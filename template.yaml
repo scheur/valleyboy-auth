@@ -5,7 +5,6 @@ Description: Auth stack for valleyboy.io with quick updates
 Parameters:
   Environment:
     Type: String
-<<<<<<< Updated upstream
     Default: dev
     AllowedValues:
       - dev
@@ -21,14 +20,6 @@ Globals:
       - arm64
     Timeout: 29
     MemorySize: 1024
-=======
-    Default: valleyboy
-    Description: Prefix for Cognito domain
-  CustomDomain:
-    Type: String
-    Default: auth-dev.valleyboy.io
-    Description: Custom domain for Cognito hosted UI
->>>>>>> Stashed changes
 
 Resources:
   # Certificate for custom domain
@@ -89,7 +80,6 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
-<<<<<<< Updated upstream
   # Custom Domain
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
@@ -116,27 +106,6 @@ Resources:
     DependsOn: UserPoolDomain
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
-=======
-  CognitoCertificate:
-    Type: AWS::CertificateManager::Certificate
-    Properties:
-      DomainName: !Ref CustomDomain
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref CustomDomain
-          HostedZoneId: Z0784189181KVEHDOY62L
-      Tags:
-        - Key: Purpose
-          Value: Cognito Custom Domain
-
-  UserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
-    Properties:
-      Domain: !Ref CustomDomain
-      UserPoolId: !Ref UserPool
-      CustomDomainConfig:
-        CertificateArn: !Ref CognitoCertificate
->>>>>>> Stashed changes
 
 Outputs:
   UserPoolId:
@@ -146,7 +115,6 @@ Outputs:
   UserPoolClientId:
     Description: Cognito User Pool Client ID
     Value: !Ref UserPoolClient
-<<<<<<< Updated upstream
 
   Domain:
     Description: Custom domain for the auth UI
@@ -155,11 +123,3 @@ Outputs:
   LoginUrl:
     Description: Login URL
     Value: !Sub https://${UserPoolDomain.Domain}/login?client_id=${UserPoolClient}&response_type=token&scope=email+openid+profile&redirect_uri=https://valleyboy.io/callback
-=======
-  CustomDomainName:
-    Description: The Cognito custom domain
-    Value: !Ref CustomDomain
-  CertificateArn:
-    Description: The ARN of the ACM certificate for the custom domain
-    Value: !Ref CognitoCertificate
->>>>>>> Stashed changes
