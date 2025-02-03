@@ -1,3 +1,4 @@
+# lambda/buildspec.yaml
 version: 0.2
 
 phases:
@@ -7,8 +8,8 @@ phases:
     commands:
       # Install UV pip
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Add to PATH
-      - export PATH="/root/.cargo/bin:$PATH"
+      # Add correct path to UV
+      - export PATH="/root/.local/bin:$PATH"
       - uv --version
       
   pre_build:
