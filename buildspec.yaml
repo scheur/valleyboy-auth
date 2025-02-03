@@ -20,15 +20,18 @@ phases:
       - node --version  # Verify node is installed
       - npm --version   # Verify npm is installed
       - npm install -g yarn
+      # Add version checks back for logging
+      - yarn --version
+      - python --version
       
   pre_build:
     commands:
       # Install project dependencies
       - echo "Installing dependencies..."
       - cd frontend
-      - yarn install --frozen-lockfile
+      - yarn install --frozen-lockfile --network-timeout 1000000
       - cd ../lambda
-      - pip install -r requirements.txt -t .
+      - uv pip install -r requirements.txt -t .
       - cd ..
       # Package CloudFormation template
       - echo "Packaging CloudFormation template..."
