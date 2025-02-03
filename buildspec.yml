@@ -3,8 +3,11 @@ version: 0.2
 phases:
   install:
     commands:
-      # Install uv
+      # Clean up any potential old installations
+      - rm -rf /root/.cargo
+      - rm -rf /root/.local/bin/uv*
+      # Install uv fresh
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Add uv to PATH
-      - export PATH="/root/.local/bin:$PATH"
+      # Add uv to PATH - IMPORTANT: only use this line
+      - source /root/.local/bin/env
       - uv --version

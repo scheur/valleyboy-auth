@@ -4,8 +4,11 @@ phases:
     runtime-versions:
       python: 3.12
     commands:
+      # Install uv
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="/root/.cargo/bin:$PATH"
+      # Add uv to PATH - IMPORTANT: only use this line
+      - source /root/.local/bin/env
+      - uv --version
   build:
     commands:
       - cd lambda
@@ -16,4 +19,4 @@ artifacts:
     - lambda/function.zip
 cache:
   paths:
-    - /root/.cache/pip/**/* 
+    - /root/.cache/pip/**/*

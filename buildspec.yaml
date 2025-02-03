@@ -14,10 +14,10 @@ phases:
     commands:
       # Install build essentials first
       - yum install -y gcc-c++ make
-      # Install UV pip
+      # Install uv
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Add UV to PATH
-      - export PATH="/root/.cargo/bin:$PATH"
+      # Add uv to PATH - IMPORTANT: only use this line
+      - source /root/.local/bin/env
       - uv --version
       # Explicitly set up Node
       - curl -sL https://rpm.nodesource.com/setup_20.x | bash -
@@ -25,7 +25,7 @@ phases:
       - node --version  # Verify node is installed
       - npm --version   # Verify npm is installed
       - npm install -g yarn
-      # Add version checks back for logging
+      # Add version checks for logging
       - yarn --version
       - python --version
       
