@@ -31,11 +31,8 @@ phases:
       - zip -r9 ../function.zip .
       - cd ../../..
       # Package CloudFormation template
-      - aws s3 cp lambda/chat/function.zip s3://${ARTIFACT_BUCKET}/${Environment}/lambda/function.zip
-      - aws cloudformation package \
-          --template-file template.yaml \
-          --s3-bucket ${ARTIFACT_BUCKET} \
-          --output-template-file packaged.yaml
+      - aws s3 cp lambda/chat/function.zip s3://${ARTIFACT_BUCKET}/${ENVIRONMENT}/lambda/function.zip
+      - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
   post_build:
     commands:
       - echo Build completed
