@@ -5,29 +5,24 @@ phases:
     runtime-versions:
       python: 3.12
       nodejs: 20
-    commands:
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - mv uv /usr/local/bin/
   pre_build:
     commands:
       - echo Installing dependencies...
-      - uv pip install -r requirements.txt
+      - pip install -r requirements.txt
   build:
     commands:
-      - echo Deploying CloudFormation template...
-      - aws cloudformation deploy --template-file template.yaml --stack-name valleyboy-auth-${ENVIRONMENT} --capabilities CAPABILITY_IAM --parameter-overrides Environment=${ENVIRONMENT}
+      - echo Packaging CloudFormation template...
+      - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
   post_build:
     commands:
       - echo Build completed
 
 artifacts:
   files:
-    - template.yaml
+    - packaged.yaml
     - requirements.txt
-    - '**/*'
   base-directory: '.'
 
 cache:
   paths:
     - '/root/.cache/pip/**/*'
-    - '/root/.cache/uv/**/*'
