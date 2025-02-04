@@ -113,6 +113,31 @@ Resources:
       ResourceRecords:
         - !GetAtt UserPoolDomain.CloudFrontDistribution
 
+  # == API Gateway ==
+  ChatApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      TracingEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "resourcePath":"$context.resourcePath", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+      MethodSettings:
+        - HttpMethod: '*'
+          LoggingLevel: INFO
+          ResourcePath: /*
+          MetricsEnabled: true
+          DataTraceEnabled: true
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+            AuthorizationScopes:
+              - email
+              - openid
+              - profile
+
   # == Lambda Function ==
   ChatFunction:
     Type: AWS::Serverless::Function
@@ -134,28 +159,9 @@ Resources:
           Properties:
             Path: /chat
             Method: POST
+            RestApiId: !Ref ChatApi
             Auth:
               Authorizer: CognitoAuthorizer
-
-  # == API Gateway ==
-  ChatApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      StageName: !Ref Environment
-      TracingEnabled: true
-      AccessLogSetting:
-        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
-        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "resourcePath":"$context.resourcePath", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
-      MethodSettings:
-        - HttpMethod: '*'
-          LoggingLevel: INFO
-          ResourcePath: /*
-          MetricsEnabled: true
-          DataTraceEnabled: true
-      Auth:
-        Authorizers:
-          CognitoAuthorizer:
-            UserPoolArn: !GetAtt UserPool.Arn
 
   # == Logging Configuration ==
   ApiAccessLogGroup:
