@@ -22,7 +22,15 @@ phases:
       - uv pip install -r requirements.txt
   build:
     commands:
-      - echo Packaging CloudFormation template...
+      # Package Lambda function
+      - cd lambda/chat
+      - mkdir -p package
+      - cp -r ../../.venv/lib/python3.12/site-packages/* package/
+      - cp index.py package/
+      - cd package
+      - zip -r9 ../function.zip .
+      - cd ../../..
+      # Package CloudFormation template
       - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
   post_build:
     commands:
@@ -31,8 +39,7 @@ phases:
 artifacts:
   files:
     - packaged.yaml
-    - requirements.txt
-    - lambda/chat/*.py
+    - lambda/chat/function.zip
   base-directory: '.'
 
 cache:
