@@ -19,22 +19,6 @@ Parameters:
       - prod
     Description: Environment (dev or prod)
 
-Globals:
-  Function:
-    Runtime: python3.12
-    MemorySize: 256
-    Timeout: 30
-    Tracing: Active
-    Environment:
-      Variables:
-        POWERTOOLS_SERVICE_NAME: !Sub valleyboy-chat-${Environment}
-        POWERTOOLS_METRICS_NAMESPACE: valleyboy
-        LOG_LEVEL: INFO
-        POWERTOOLS_LOGGER_LOG_EVENT: true
-        POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
-        ENVIRONMENT: !Ref Environment
-        AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
-
 Resources:
   # == Cognito Configuration ==
   UserPool:
@@ -96,6 +80,8 @@ Resources:
 
   # == Domain Configuration ==
   UserPoolDomain:
+    DependsOn:
+      - CognitoDNSRecord
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       Domain: !Ref CustomDomain
@@ -103,7 +89,8 @@ Resources:
       CustomDomainConfig:
         CertificateArn: !Ref CognitoCertificate
 
-  AuthDevDNSRecord:
+  # == DNS Records ==
+  CognitoDNSRecord:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: Z0784189181KVEHDOY62L
@@ -143,7 +130,18 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
+      Runtime: python3.12
       CodeUri: s3://${ARTIFACT_BUCKET}/${Environment}/lambda/function.zip
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: !Sub valleyboy-chat-${Environment}
+          POWERTOOLS_METRICS_NAMESPACE: valleyboy
+          LOG_LEVEL: INFO
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          ENVIRONMENT: !Ref Environment
       Policies:
         - Statement:
             - Effect: Allow
@@ -151,6 +149,8 @@ Resources:
                 - bedrock:InvokeModel
               Resource: 
                 - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
+      TracingConfig:
+        Mode: Active        
       Events:
         ChatApi:
           Type: Api
