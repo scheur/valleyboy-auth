@@ -15,6 +15,9 @@ phases:
     commands:
       - echo Validating CloudFormation template...
       - aws cloudformation validate-template --template-body file://template.yaml
+      - echo Creating virtual environment...
+      - uv venv
+      - source .venv/bin/activate
       - echo Installing dependencies...
       - uv pip install -r requirements.txt
   build:
@@ -37,3 +40,4 @@ cache:
     - /root/.local/bin/**/*
     - /root/.cache/uv/**/*
     - /root/.cache/pip/**/*
+    - .venv/**/*

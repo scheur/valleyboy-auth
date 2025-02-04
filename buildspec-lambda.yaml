@@ -13,6 +13,8 @@ phases:
     commands:
       - cd lambda
       - mkdir -p .
+      - uv venv
+      - source .venv/bin/activate
       - PYTHONPATH=. uv pip install -r requirements.txt
       - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*"
 artifacts:
@@ -23,3 +25,4 @@ cache:
     - /root/.local/bin/**/*
     - /root/.cache/uv/**/*
     - /root/.cache/pip/**/*
+    - lambda/.venv/**/*
