@@ -6,11 +6,9 @@ phases:
       python: 3.12
       nodejs: 20
     commands:
-      # Install uv with proper installation and permissions
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - chmod +x uv
-      - mv uv /usr/local/bin/
-      - uv --version
+      # Install uv properly with curl installation
+      - curl -LsSf https://astral.sh/uv/install.sh | UV_FORCE_INSTALL=1 bash
+      - export PATH="/root/.cargo/bin:$PATH"
   pre_build:
     commands:
       - echo Validating CloudFormation template...
@@ -34,5 +32,6 @@ artifacts:
 
 cache:
   paths:
+    - /root/.cargo/bin/**/*
     - /root/.cache/uv/**/*
     - /root/.cache/pip/**/*
