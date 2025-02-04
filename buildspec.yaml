@@ -5,6 +5,9 @@ phases:
     runtime-versions:
       python: 3.12
       nodejs: 20
+    commands:
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - mv uv /usr/local/bin/
   pre_build:
     commands:
       - echo Installing dependencies...
@@ -27,3 +30,4 @@ artifacts:
 cache:
   paths:
     - '/root/.cache/pip/**/*'
+    - '/root/.cache/uv/**/*'
