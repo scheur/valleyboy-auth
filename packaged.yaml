@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Cognito User Pool with Hosted UI and Chat Backend for valleyboy.io
-
 Parameters:
   DomainPrefix:
     Type: String
@@ -15,10 +14,9 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues:
-      - dev
-      - prod
+    - dev
+    - prod
     Description: Environment (dev or prod)
-
 Globals:
   Function:
     Runtime: python3.12
@@ -27,107 +25,110 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        POWERTOOLS_SERVICE_NAME: !Sub valleyboy-chat-${Environment}
+        POWERTOOLS_SERVICE_NAME:
+          Fn::Sub: valleyboy-chat-${Environment}
         POWERTOOLS_METRICS_NAMESPACE: valleyboy
         LOG_LEVEL: INFO
         POWERTOOLS_LOGGER_LOG_EVENT: true
         POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
-        ENVIRONMENT: !Ref Environment
+        ENVIRONMENT:
+          Ref: Environment
         AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
-
 Resources:
-  # == Cognito Configuration ==
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub valleyboy-users-${Environment}
+      UserPoolName:
+        Fn::Sub: valleyboy-users-${Environment}
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: false
       AutoVerifiedAttributes:
-        - email
+      - email
       UsernameAttributes:
-        - email
+      - email
       Schema:
-        - Name: email
-          Required: true
-          Mutable: false
-          AttributeDataType: String
-
+      - Name: email
+        Required: true
+        Mutable: false
+        AttributeDataType: String
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      UserPoolId: !Ref UserPool
-      ClientName: !Sub valleyboy-web-client-${Environment}
+      UserPoolId:
+        Ref: UserPool
+      ClientName:
+        Fn::Sub: valleyboy-web-client-${Environment}
       GenerateSecret: false
       RefreshTokenValidity: 30
       AuthSessionValidity: 3
       AllowedOAuthFlows:
-        - implicit
+      - implicit
       AllowedOAuthScopes:
-        - email
-        - openid
-        - profile
+      - email
+      - openid
+      - profile
       CallbackURLs:
-        - http://localhost:3000/callback
-        - !Sub https://${CustomDomain}/oauth2/idpresponse
-        - https://valleyboy.io/callback
+      - http://localhost:3000/callback
+      - Fn::Sub: https://${CustomDomain}/oauth2/idpresponse
+      - https://valleyboy.io/callback
       LogoutURLs:
-        - http://localhost:3000
-        - !Sub https://${CustomDomain}
-        - https://valleyboy.io
+      - http://localhost:3000
+      - Fn::Sub: https://${CustomDomain}
+      - https://valleyboy.io
       SupportedIdentityProviders:
-        - COGNITO
+      - COGNITO
       AllowedOAuthFlowsUserPoolClient: true
       EnableTokenRevocation: true
       EnablePropagateAdditionalUserContextData: false
-
-  # == Certificate Configuration ==
   CognitoCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
-      DomainName: !Ref CustomDomain
+      DomainName:
+        Ref: CustomDomain
       ValidationMethod: DNS
       DomainValidationOptions:
-        - DomainName: !Ref CustomDomain
-          HostedZoneId: Z0784189181KVEHDOY62L
+      - DomainName:
+          Ref: CustomDomain
+        HostedZoneId: Z0784189181KVEHDOY62L
       Tags:
-        - Key: Purpose
-          Value: Cognito Custom Domain
-
-  # == Domain Configuration ==
+      - Key: Purpose
+        Value: Cognito Custom Domain
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Ref CustomDomain
-      UserPoolId: !Ref UserPool
+      Domain:
+        Ref: CustomDomain
+      UserPoolId:
+        Ref: UserPool
       CustomDomainConfig:
-        CertificateArn: !Ref CognitoCertificate
-
+        CertificateArn:
+          Ref: CognitoCertificate
   AuthDevDNSRecord:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: Z0784189181KVEHDOY62L
-      Name: !Ref CustomDomain
+      Name:
+        Ref: CustomDomain
       Type: CNAME
       TTL: 300
       ResourceRecords:
-        - !GetAtt UserPoolDomain.CloudFrontDistribution
-
-  # == Lambda Function ==
+      - Fn::GetAtt:
+        - UserPoolDomain
+        - CloudFrontDistribution
   ChatFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      CodeUri: ./lambda/chat/
+      CodeUri: s3://valleyboy-auth-artifacts-811452274651/e02e10c4c617f0bac770580f64df3747
       Layers:
-        - !Sub arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsPythonV2:61
+      - Fn::Sub: arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsPythonV2:61
       Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeModel
-              Resource: 
-                - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
+      - Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          Resource:
+          - Fn::Sub: arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
       Events:
         ChatApi:
           Type: Api
@@ -136,45 +137,52 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
-
-  # == API Gateway ==
   ChatApi:
     Type: AWS::Serverless::Api
     Properties:
-      StageName: !Ref Environment
+      StageName:
+        Ref: Environment
       TracingEnabled: true
       AccessLogSetting:
-        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
-        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "resourcePath":"$context.resourcePath", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+        DestinationArn:
+          Fn::GetAtt:
+          - ApiAccessLogGroup
+          - Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp",
+          "caller":"$context.identity.caller", "user":"$context.identity.user", "requestTime":"$context.requestTime",
+          "httpMethod":"$context.httpMethod", "resourcePath":"$context.resourcePath",
+          "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength"
+          }'
       MethodSettings:
-        - HttpMethod: '*'
-          LoggingLevel: INFO
-          ResourcePath: /*
-          MetricsEnabled: true
-          DataTraceEnabled: true
+      - HttpMethod: '*'
+        LoggingLevel: INFO
+        ResourcePath: /*
+        MetricsEnabled: true
+        DataTraceEnabled: true
       Auth:
         Authorizers:
           CognitoAuthorizer:
-            UserPoolArn: !GetAtt UserPool.Arn
-
-  # == Logging Configuration ==
+            UserPoolArn:
+              Fn::GetAtt:
+              - UserPool
+              - Arn
   ApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/apigateway/valleyboy-chat-${Environment}
+      LogGroupName:
+        Fn::Sub: /aws/apigateway/valleyboy-chat-${Environment}
       RetentionInDays: 30
-
   CognitoLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/cognito/valleyboy-${Environment}
+      LogGroupName:
+        Fn::Sub: /aws/cognito/valleyboy-${Environment}
       RetentionInDays: 30
-
-  # == CloudWatch Alarms ==
   ChatFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub ${ChatFunction}-Errors-${Environment}
+      AlarmName:
+        Fn::Sub: ${ChatFunction}-Errors-${Environment}
       AlarmDescription: Alert when Lambda errors occur
       MetricName: Errors
       Namespace: AWS/Lambda
@@ -184,14 +192,15 @@ Resources:
       Threshold: 1
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
-        - Name: FunctionName
-          Value: !Ref ChatFunction
+      - Name: FunctionName
+        Value:
+          Ref: ChatFunction
       TreatMissingData: notBreaching
-
   ApiGateway5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub ${ChatApi}-5xxErrors-${Environment}
+      AlarmName:
+        Fn::Sub: ${ChatApi}-5xxErrors-${Environment}
       AlarmDescription: Alert when 5xx errors occur
       MetricName: 5XXError
       Namespace: AWS/ApiGateway
@@ -201,47 +210,57 @@ Resources:
       Threshold: 1
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
-        - Name: ApiName
-          Value: !Ref ChatApi
-        - Name: Stage
-          Value: !Ref Environment
+      - Name: ApiName
+        Value:
+          Ref: ChatApi
+      - Name: Stage
+        Value:
+          Ref: Environment
       TreatMissingData: notBreaching
-
   ApiLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub ${ChatApi}-Latency-${Environment}
+      AlarmName:
+        Fn::Sub: ${ChatApi}-Latency-${Environment}
       AlarmDescription: Alert when API latency is high
       MetricName: Latency
       Namespace: AWS/ApiGateway
       Statistic: Average
       Period: 300
       EvaluationPeriods: 3
-      Threshold: 5000  # 5 seconds
+      Threshold: 5000
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
-        - Name: ApiName
-          Value: !Ref ChatApi
-        - Name: Stage
-          Value: !Ref Environment
+      - Name: ApiName
+        Value:
+          Ref: ChatApi
+      - Name: Stage
+        Value:
+          Ref: Environment
       TreatMissingData: notBreaching
-
 Outputs:
   UserPoolId:
     Description: The ID of the Cognito User Pool
-    Value: !Ref UserPool
+    Value:
+      Ref: UserPool
   UserPoolClientId:
     Description: The ID of the Cognito User Pool Client
-    Value: !Ref UserPoolClient
+    Value:
+      Ref: UserPoolClient
   CustomDomainName:
     Description: The Cognito custom domain
-    Value: !Ref CustomDomain
+    Value:
+      Ref: CustomDomain
   CertificateArn:
     Description: The ARN of the ACM certificate for the custom domain
-    Value: !Ref CognitoCertificate
+    Value:
+      Ref: CognitoCertificate
   ApiEndpoint:
     Description: The API Gateway endpoint URL
-    Value: !Sub https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+    Value:
+      Fn::Sub: https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
   LogGroups:
     Description: CloudWatch Log Group Names
-    Value: !Sub /aws/lambda/${ChatFunction}, /aws/apigateway/valleyboy-chat-${Environment}, /aws/cognito/valleyboy-${Environment}
+    Value:
+      Fn::Sub: /aws/lambda/${ChatFunction}, /aws/apigateway/valleyboy-chat-${Environment},
+        /aws/cognito/valleyboy-${Environment}

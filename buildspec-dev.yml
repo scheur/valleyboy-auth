@@ -2,9 +2,25 @@ version: 0.2
 
 phases:
   install:
+    runtime-versions:
+      python: 3.12
     commands:
-      # Install uv
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Add uv to PATH - IMPORTANT: only use this line, remove any cargo path references
+      # Install uv with validation
+      - curl -LsSf https://astral.sh/uv/install.sh | UV_FORCE_INSTALL=1 bash
       - source /root/.local/bin/env
-      - uv --version 
+      - uv --version || exit 1
+      - which uv || exit 1
+  pre_build:
+    commands:
+      - echo Installing dependencies...
+      - uv pip install -r requirements-dev.txt
+  build:
+    commands:
+      - echo Running tests...
+      - pytest
+      
+cache:
+  paths:
+    - /root/.local/bin/**/*
+    - /root/.cache/uv/**/*
+    - /root/.cache/pip/**/*
