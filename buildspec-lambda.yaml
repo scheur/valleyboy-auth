@@ -11,12 +11,14 @@ phases:
       - which uv || exit 1
   build:
     commands:
+      # Create and package Lambda functions
       - cd lambda
       - mkdir -p .
       - uv venv
       - source .venv/bin/activate
       - PYTHONPATH=. uv pip install -r requirements.txt
-      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*"
+      - cp -r .venv/lib/python3.12/site-packages/* .
+      - zip -r9 function.zip . -x "*.pyc" "*.git*" "tests/*" ".venv/*"
 artifacts:
   files:
     - lambda/function.zip

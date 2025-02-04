@@ -143,9 +143,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      CodeUri: ./lambda/chat/
-      Layers:
-        - !Sub arn:aws:lambda:${AWS::Region}:094274105915:layer:AWSLambdaPowertoolsPythonV2:61
+      CodeUri: ./lambda/function.zip  # Updated to match buildspec output
       Policies:
         - Statement:
             - Effect: Allow
