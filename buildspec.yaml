@@ -13,13 +13,13 @@ phases:
       - which uv || exit 1
   pre_build:
     commands:
-      - echo Validating CloudFormation template...
-      - aws cloudformation validate-template --template-body file://template.yaml
       - echo Creating virtual environment...
       - uv venv
       - source .venv/bin/activate
       - echo Installing dependencies...
       - uv pip install -r requirements.txt
+      - echo Validating CloudFormation template...
+      - aws cloudformation validate-template --template-body file://template.yaml
   build:
     commands:
       # Package Lambda function
@@ -31,7 +31,11 @@ phases:
       - zip -r9 ../function.zip .
       - cd ../../..
       # Package CloudFormation template
-      - aws cloudformation package --template-file template.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged.yaml
+      - aws s3 cp lambda/chat/function.zip s3://${ARTIFACT_BUCKET}/${Environment}/lambda/function.zip
+      - aws cloudformation package \
+          --template-file template.yaml \
+          --s3-bucket ${ARTIFACT_BUCKET} \
+          --output-template-file packaged.yaml
   post_build:
     commands:
       - echo Build completed
