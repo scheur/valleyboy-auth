@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/aws-cloudformation/cfn-lint
+    rev: v0.85.0
+    hooks:
+      - id: cfn-lint
+        files: template\.yaml$
+        args: [--ignore-checks, W]  # Ignore warnings, focus on errors
+
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.12
