@@ -1,1 +1,29 @@
-...
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+      nodejs: 20
+  pre_build:
+    commands:
+      - echo Installing dependencies...
+      - uv pip install -r requirements.txt
+  build:
+    commands:
+      - echo Deploying CloudFormation template...
+      - aws cloudformation deploy --template-file template.yaml --stack-name valleyboy-auth-${ENVIRONMENT} --capabilities CAPABILITY_IAM --parameter-overrides Environment=${ENVIRONMENT}
+  post_build:
+    commands:
+      - echo Build completed
+
+artifacts:
+  files:
+    - template.yaml
+    - requirements.txt
+    - '**/*'
+  base-directory: '.'
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'
