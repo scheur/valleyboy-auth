@@ -142,6 +142,8 @@ Resources:
           POWERTOOLS_LOGGER_LOG_EVENT: true
           POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
           ENVIRONMENT: !Ref Environment
+      Layers:
+        - arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsPythonV2:61
       Policies:
         - Statement:
             - Effect: Allow
@@ -149,6 +151,9 @@ Resources:
                 - bedrock:InvokeModel
               Resource: 
                 - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
+            - Effect: Allow
+              Action: lambda:GetLayerVersion
+              Resource: arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsPythonV2:*
       TracingConfig:
         Mode: Active        
       Events:
