@@ -143,7 +143,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      CodeUri: ./lambda/function.zip  # Updated to match buildspec output
+      CodeUri: s3://${ARTIFACT_BUCKET}/${Environment}/lambda/function.zip
       Policies:
         - Statement:
             - Effect: Allow
@@ -248,4 +248,8 @@ Outputs:
     Value: !Sub https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
   LogGroups:
     Description: CloudWatch Log Group Names
-    Value: !Sub /aws/lambda/${ChatFunction}, /aws/apigateway/valleyboy-chat-${Environment}, /aws/cognito/valleyboy-${Environment}
+    Value: !Join 
+      - ', '
+      - - !Sub /aws/lambda/${ChatFunction}
+        - !Sub /aws/apigateway/valleyboy-chat-${Environment}
+        - !Sub /aws/cognito/valleyboy-${Environment}
