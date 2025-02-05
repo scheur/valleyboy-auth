@@ -121,10 +121,9 @@ Resources:
       FunctionName: !Sub ${AWS::StackName}-chat
       Handler: index.handler
       Runtime: python3.12
-      Code:
-        ZipFile: |
-          def handler(event, context):
-              return {"statusCode": 200, "body": "Function created, actual code to be deployed"}
+      Code: 
+        S3Bucket: !Sub valleyboy-lambda-code-${AWS::Region}
+        S3Key: chat-function.zip
       Role: !GetAtt ChatLambdaRole.Arn
       Timeout: 30
       MemorySize: 256
