@@ -1,24 +1,20 @@
 version: 0.2
 
 phases:
-  install:
-    runtime-versions:
-      python: 3.12
-  
   pre_build:
     commands:
+      - aws s3api head-bucket --bucket valleyboy-lambda-code-us-east-1 2>/dev/null || aws s3api create-bucket --bucket valleyboy-lambda-code-us-east-1
+      - aws s3api put-bucket-versioning --bucket valleyboy-lambda-code-us-east-1 --versioning-configuration Status=Enabled
       - aws cloudformation validate-template --template-body file://template.yaml
       
   build:
     commands:
-      - echo "Building CloudFormation stack..."
+      - cd lambda/chat
+      - zip -r ../../chat-function.zip ./*
+      - cd ../..
+      - aws s3 cp chat-function.zip s3://valleyboy-lambda-code-us-east-1/
       
-  post_build:
-    commands:
-      - echo "Build completed"
-
 artifacts:
   files:
     - template.yaml
-    - lambda/*
-  base-directory: .
+  name: BuildOutput
