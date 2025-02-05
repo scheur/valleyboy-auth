@@ -1,96 +1,25 @@
 version: 0.2
-
 env:
   variables:
-    LAMBDA_CODE_BUCKET: "valleyboy-lambda-code-dev"
-    LAMBDA_CODE_KEY: "chat-function.zip"
-    STACK_NAME: "valleyboy-auth-dev"
-
+    ENVIRONMENT: dev
 phases:
   install:
     runtime-versions:
       python: 3.12
     commands:
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - uv --version
-      
+      - curl -LsSf https://astral.sh/uv/install.sh | UV_FORCE_INSTALL=1 bash
+      - source $HOME/.local/bin/env
   pre_build:
     commands:
-      # Check if stack exists and is in a good state
-      - |
-        if aws cloudformation describe-stacks --stack-name ${STACK_NAME} 2>/dev/null; then
-          STACK_STATUS=$(aws cloudformation describe-stacks --stack-name ${STACK_NAME} --query 'Stacks[0].StackStatus' --output text)
-          if [[ ${STACK_STATUS} =~ .*_IN_PROGRESS$ ]]; then
-            echo "Stack ${STACK_NAME} is in ${STACK_STATUS} state. Waiting for completion..."
-            aws cloudformation wait stack-${STACK_STATUS,,}
-          fi
-          if [[ ${STACK_STATUS} =~ .*FAILED$ || ${STACK_STATUS} == "ROLLBACK_COMPLETE" ]]; then
-            echo "Stack ${STACK_NAME} is in failed state. Deleting..."
-            aws cloudformation delete-stack --stack-name ${STACK_NAME}
-            aws cloudformation wait stack-delete-complete --stack-name ${STACK_NAME}
-          fi
-        fi
-
-      # Create S3 bucket if it doesn't exist
-      - |
-        if ! aws s3api head-bucket --bucket ${LAMBDA_CODE_BUCKET} 2>/dev/null; then
-          S3_ERROR=$?
-          if [ $S3_ERROR -eq 254 ] || [ $S3_ERROR -eq 255 ]; then
-            echo "Bucket ${LAMBDA_CODE_BUCKET} doesn't exist. Creating..."
-            aws s3 mb s3://${LAMBDA_CODE_BUCKET}
-            aws s3api wait bucket-exists --bucket ${LAMBDA_CODE_BUCKET}
-          else
-            echo "Error checking bucket. Exit code: $S3_ERROR"
-            exit 1
-          fi
-        fi
-
-      # Install dependencies
-      - echo "Installing dependencies with uv..."
-      - cd lambda/chat
-      - uv pip install -r requirements.txt --system
-      - cd ../..
-      
+      - uv pip install -r requirements.txt
+      - aws cloudformation validate-template --template-body file://template.yaml
   build:
     commands:
-      # Package Lambda function
-      - echo "Packaging Lambda function..."
-      - cd lambda/chat
-      - zip -r ../../${LAMBDA_CODE_KEY} .
-      - cd ../..
-      
-      # Upload to S3 with versioning
-      - echo "Uploading Lambda code to S3..."
-      - |
-        VERSION_ID=$(aws s3api put-object \
-          --bucket ${LAMBDA_CODE_BUCKET} \
-          --key ${LAMBDA_CODE_KEY} \
-          --body ${LAMBDA_CODE_KEY} \
-          --query 'VersionId' \
-          --output text)
-        echo "Uploaded Lambda code version: ${VERSION_ID}"
-      
-      # Deploy CloudFormation stack
-      - echo "Deploying CloudFormation stack..."
-      - |
-        aws cloudformation deploy \
-          --template-file template.yaml \
-          --stack-name ${STACK_NAME} \
-          --parameter-overrides \
-            LambdaCodeBucket=${LAMBDA_CODE_BUCKET} \
-            LambdaCodeKey=${LAMBDA_CODE_KEY} \
-          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-          --no-fail-on-empty-changeset
-      
+      - echo "No build needed for CloudFormation template"
   post_build:
     commands:
       - echo "Build completed successfully"
-      - echo "Lambda code version: ${VERSION_ID}"
-      # Store the version ID for potential rollbacks
-      - aws ssm put-parameter --name "/valleyboy/${STACK_NAME}/latest-lambda-version" --value "${VERSION_ID}" --type String --overwrite
-
 artifacts:
   files:
     - template.yaml
-    - ${LAMBDA_CODE_KEY}
-  discard-paths: yes
+  name: BuildOutput
