@@ -1,0 +1,46 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - uv --version
+      
+  pre_build:
+    commands:
+      - echo "Installing dependencies with uv..."
+      - cd lambda/chat
+      - uv pip install -r requirements.txt --system
+      - cd ../..
+      
+  build:
+    commands:
+      - echo "Packaging Lambda function..."
+      - cd lambda/chat
+      - zip -r ../../chat-function.zip .
+      - cd ../..
+      
+      - echo "Creating/updating S3 bucket for Lambda code..."
+      - aws s3api head-bucket --bucket ${LAMBDA_CODE_BUCKET} || aws s3 mb s3://${LAMBDA_CODE_BUCKET}
+      - aws s3 cp chat-function.zip s3://${LAMBDA_CODE_BUCKET}/chat-function.zip
+      
+      - echo "Deploying CloudFormation stack..."
+      - aws cloudformation deploy 
+        --template-file template.yaml 
+        --stack-name valleyboy-auth-dev 
+        --parameter-overrides 
+          LambdaCodeBucket=${LAMBDA_CODE_BUCKET} 
+          LambdaCodeKey=chat-function.zip
+        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+      
+  post_build:
+    commands:
+      - echo "Build completed"
+
+artifacts:
+  files:
+    - template.yaml
+    - chat-function.zip
+  discard-paths: yes

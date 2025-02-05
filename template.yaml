@@ -1,5 +1,4 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
 Description: Cognito User Pool with Hosted UI and Chat Backend for valleyboy.io
 
 Parameters:
@@ -11,20 +10,31 @@ Parameters:
     Type: String
     Default: auth-dev.valleyboy.io
     Description: Custom domain for Cognito hosted UI
-  Environment:
+  LambdaCodeBucket:
     Type: String
-    Default: dev
-    AllowedValues:
-      - dev
-      - prod
-    Description: Environment (dev or prod)
+    Description: S3 bucket containing Lambda code
+  LambdaCodeKey:
+    Type: String
+    Description: S3 key for Lambda code package
 
 Resources:
-  # == Cognito Configuration ==
+  # S3 Bucket for Lambda code if it doesn't exist
+  LambdaCodeBucketResource:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref LambdaCodeBucket
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub valleyboy-users-${Environment}
+      UserPoolName: valleyboy-users
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: false
       AutoVerifiedAttributes:
@@ -41,7 +51,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref UserPool
-      ClientName: !Sub valleyboy-web-client-${Environment}
+      ClientName: valleyboy-web-client
       GenerateSecret: false
       RefreshTokenValidity: 30
       AuthSessionValidity: 3
@@ -53,11 +63,11 @@ Resources:
         - profile
       CallbackURLs:
         - http://localhost:3000/callback
-        - !Sub https://${CustomDomain}/oauth2/idpresponse
+        - https://auth-dev.valleyboy.io/oauth2/idpresponse
         - https://valleyboy.io/callback
       LogoutURLs:
         - http://localhost:3000
-        - !Sub https://${CustomDomain}
+        - https://auth-dev.valleyboy.io
         - https://valleyboy.io
       SupportedIdentityProviders:
         - COGNITO
@@ -65,7 +75,6 @@ Resources:
       EnableTokenRevocation: true
       EnablePropagateAdditionalUserContextData: false
 
-  # == Certificate Configuration ==
   CognitoCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
@@ -78,20 +87,18 @@ Resources:
         - Key: Purpose
           Value: Cognito Custom Domain
 
-  # == Domain Configuration ==
   UserPoolDomain:
-    DependsOn:
-      - CognitoDNSRecord
     Type: AWS::Cognito::UserPoolDomain
+    DependsOn: CognitoCertificate
     Properties:
       Domain: !Ref CustomDomain
       UserPoolId: !Ref UserPool
       CustomDomainConfig:
         CertificateArn: !Ref CognitoCertificate
 
-  # == DNS Records ==
-  CognitoDNSRecord:
+  AuthDevDNSRecord:
     Type: AWS::Route53::RecordSet
+    DependsOn: UserPoolDomain
     Properties:
       HostedZoneId: Z0784189181KVEHDOY62L
       Name: !Ref CustomDomain
@@ -100,140 +107,99 @@ Resources:
       ResourceRecords:
         - !GetAtt UserPoolDomain.CloudFrontDistribution
 
-  # == API Gateway ==
-  ChatApi:
-    Type: AWS::Serverless::Api
+  ChatLambdaRole:
+    Type: AWS::IAM::Role
     Properties:
-      StageName: !Ref Environment
-      TracingEnabled: true
-      AccessLogSetting:
-        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
-        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "caller":"$context.identity.caller", "user":"$context.identity.user", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "resourcePath":"$context.resourcePath", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
-      MethodSettings:
-        - HttpMethod: '*'
-          LoggingLevel: INFO
-          ResourcePath: /*
-          MetricsEnabled: true
-          DataTraceEnabled: true
-      Auth:
-        DefaultAuthorizer: CognitoAuthorizer
-        Authorizers:
-          CognitoAuthorizer:
-            UserPoolArn: !GetAtt UserPool.Arn
-            AuthorizationScopes:
-              - email
-              - openid
-              - profile
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: 
+                  - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
 
-  # == Lambda Function ==
-  ChatFunction:
-    Type: AWS::Serverless::Function
+  ChatLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaCodeBucketResource
     Properties:
       Handler: index.handler
       Runtime: python3.12
-      CodeUri: s3://${ARTIFACT_BUCKET}/${Environment}/lambda/function.zip
-      MemorySize: 256
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Role: !GetAtt ChatLambdaRole.Arn
       Timeout: 30
+      MemorySize: 256
       Environment:
         Variables:
-          POWERTOOLS_SERVICE_NAME: !Sub valleyboy-chat-${Environment}
-          POWERTOOLS_METRICS_NAMESPACE: valleyboy
+          POWERTOOLS_SERVICE_NAME: valleyboy-chat
           LOG_LEVEL: INFO
-          POWERTOOLS_LOGGER_LOG_EVENT: true
-          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
-          ENVIRONMENT: !Ref Environment
       Layers:
-        - arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsPythonV2:61
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeModel
-              Resource: 
-                - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20241022-v2:0
-            - Effect: Allow
-              Action: lambda:GetLayerVersion
-              Resource: arn:aws:lambda:us-east-1:094274105915:layer:AWSLambdaPowertoolsPythonV2:*
-      TracingConfig:
-        Mode: Active        
-      Events:
-        ChatApi:
-          Type: Api
-          Properties:
-            Path: /chat
-            Method: POST
-            RestApiId: !Ref ChatApi
-            Auth:
-              Authorizer: CognitoAuthorizer
+        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:46
 
-  # == Logging Configuration ==
-  ApiAccessLogGroup:
-    Type: AWS::Logs::LogGroup
+  ChatApi:
+    Type: AWS::ApiGateway::RestApi
     Properties:
-      LogGroupName: !Sub /aws/apigateway/valleyboy-chat-${Environment}
-      RetentionInDays: 30
+      Name: ValleyboyChatApi
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
 
-  CognitoLogGroup:
-    Type: AWS::Logs::LogGroup
+  ChatResource:
+    Type: AWS::ApiGateway::Resource
     Properties:
-      LogGroupName: !Sub /aws/cognito/valleyboy-${Environment}
-      RetentionInDays: 30
+      ParentId: !GetAtt ChatApi.RootResourceId
+      PathPart: chat
+      RestApiId: !Ref ChatApi
 
-  # == CloudWatch Alarms ==
-  ChatFunctionErrorsAlarm:
-    Type: AWS::CloudWatch::Alarm
+  ChatMethod:
+    Type: AWS::ApiGateway::Method
     Properties:
-      AlarmName: !Sub ${ChatFunction}-Errors-${Environment}
-      AlarmDescription: Alert when Lambda errors occur
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 1
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref ChatFunction
-      TreatMissingData: notBreaching
+      AuthorizationType: COGNITO_USER_POOLS
+      HttpMethod: POST
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ChatLambda.Arn}/invocations
+      ResourceId: !Ref ChatResource
+      RestApiId: !Ref ChatApi
+      AuthorizerId: !Ref ChatAuthorizer
 
-  ApiGateway5xxAlarm:
-    Type: AWS::CloudWatch::Alarm
+  ChatAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
     Properties:
-      AlarmName: !Sub ${ChatApi}-5xxErrors-${Environment}
-      AlarmDescription: Alert when 5xx errors occur
-      MetricName: 5XXError
-      Namespace: AWS/ApiGateway
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 1
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: ApiName
-          Value: !Ref ChatApi
-        - Name: Stage
-          Value: !Ref Environment
-      TreatMissingData: notBreaching
+      Name: CognitoUserPoolAuthorizer
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      RestApiId: !Ref ChatApi
+      ProviderARNs:
+        - !GetAtt UserPool.Arn
 
-  ApiLatencyAlarm:
-    Type: AWS::CloudWatch::Alarm
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ChatMethod
     Properties:
-      AlarmName: !Sub ${ChatApi}-Latency-${Environment}
-      AlarmDescription: Alert when API latency is high
-      MetricName: Latency
-      Namespace: AWS/ApiGateway
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 3
-      Threshold: 5000  # 5 seconds
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: ApiName
-          Value: !Ref ChatApi
-        - Name: Stage
-          Value: !Ref Environment
-      TreatMissingData: notBreaching
+      RestApiId: !Ref ChatApi
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiDeployment
+      RestApiId: !Ref ChatApi
+      StageName: dev
 
 Outputs:
   UserPoolId:
@@ -250,11 +216,7 @@ Outputs:
     Value: !Ref CognitoCertificate
   ApiEndpoint:
     Description: The API Gateway endpoint URL
-    Value: !Sub https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
-  LogGroups:
-    Description: CloudWatch Log Group Names
-    Value: !Join 
-      - ', '
-      - - !Sub /aws/lambda/${ChatFunction}
-        - !Sub /aws/apigateway/valleyboy-chat-${Environment}
-        - !Sub /aws/cognito/valleyboy-${Environment}
+    Value: !Sub https://${ChatApi}.execute-api.${AWS::Region}.amazonaws.com/dev/
+  LambdaCodeBucket:
+    Description: The S3 bucket for Lambda code
+    Value: !Ref LambdaCodeBucket
