@@ -18,5 +18,48 @@ Parameters:
     Type: String
     Default: chat-function.zip
     Description: S3 key for Lambda code package
-    
-# Rest of the template remains the same...
+
+Conditions:
+  CreateBucket: !Equals 
+    - !Ref LambdaCodeBucket
+    - valleyboy-lambda-code-dev
+
+Resources:
+  # S3 Bucket for Lambda code if it doesn't exist
+  LambdaCodeBucketResource:
+    Type: AWS::S3::Bucket
+    Condition: CreateBucket
+    Properties:
+      BucketName: !Ref LambdaCodeBucket
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+
+  LambdaCodeBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateBucket
+    Properties:
+      Bucket: !Ref LambdaCodeBucketResource
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub ${LambdaCodeBucketResource.Arn}/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+
+# Rest of template remains the same...
