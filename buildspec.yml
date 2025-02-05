@@ -1,5 +1,10 @@
 version: 0.2
 
+env:
+  variables:
+    LAMBDA_CODE_BUCKET: "valleyboy-lambda-code-dev"
+    LAMBDA_CODE_KEY: "chat-function.zip"
+
 phases:
   install:
     runtime-versions:
@@ -19,21 +24,21 @@ phases:
     commands:
       - echo "Packaging Lambda function..."
       - cd lambda/chat
-      - zip -r ../../chat-function.zip .
+      - zip -r ../../${LAMBDA_CODE_KEY} .
       - cd ../..
       
-      - echo "Creating/updating S3 bucket for Lambda code..."
-      - aws s3api head-bucket --bucket ${LAMBDA_CODE_BUCKET} || aws s3 mb s3://${LAMBDA_CODE_BUCKET}
-      - aws s3 cp chat-function.zip s3://${LAMBDA_CODE_BUCKET}/chat-function.zip
+      - echo "Creating/updating S3 bucket for Lambda code if needed..."
+      - aws s3api head-bucket --bucket ${LAMBDA_CODE_BUCKET} 2>/dev/null || aws s3 mb s3://${LAMBDA_CODE_BUCKET}
+      - aws s3 cp ${LAMBDA_CODE_KEY} s3://${LAMBDA_CODE_BUCKET}/${LAMBDA_CODE_KEY}
       
       - echo "Deploying CloudFormation stack..."
-      - aws cloudformation deploy 
-        --template-file template.yaml 
-        --stack-name valleyboy-auth-dev 
-        --parameter-overrides 
-          LambdaCodeBucket=${LAMBDA_CODE_BUCKET} 
-          LambdaCodeKey=chat-function.zip
-        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+      - aws cloudformation deploy \
+          --template-file template.yaml \
+          --stack-name valleyboy-auth-dev \
+          --parameter-overrides \
+            LambdaCodeBucket=${LAMBDA_CODE_BUCKET} \
+            LambdaCodeKey=${LAMBDA_CODE_KEY} \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
       
   post_build:
     commands:
@@ -42,5 +47,5 @@ phases:
 artifacts:
   files:
     - template.yaml
-    - chat-function.zip
+    - ${LAMBDA_CODE_KEY}
   discard-paths: yes
